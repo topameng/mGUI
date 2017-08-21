@@ -14,7 +14,7 @@ Shader "Unlit/Text"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 
 		Cull Off
@@ -74,7 +74,7 @@ Shader "Unlit/Text"
 			"Queue"="Transparent"
 			"IgnoreProjector"="True"
 			"RenderType"="Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 		
 		Lighting Off

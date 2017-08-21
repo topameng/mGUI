@@ -15,7 +15,7 @@ Shader "Hidden/Unlit/Transparent Masked 1"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 		
 		Pass
@@ -37,7 +37,7 @@ Shader "Hidden/Unlit/Transparent Masked 1"
 			sampler2D _MainTex;
 			sampler2D _Mask;
 			float4 _ClipRange0 = float4(0.0, 0.0, 1.0, 1.0);
-			float2 _ClipArgs0 = float2(1000.0, 1000.0);
+			float4 _ClipArgs0 = float4(1000.0, 1000.0, 0.0, 1.0);
 
 			struct appdata_t
 			{
@@ -56,6 +56,14 @@ Shader "Hidden/Unlit/Transparent Masked 1"
 				fixed4 color : COLOR;
 			};
 
+			float2 Rotate (float2 v, float2 rot)
+			{
+				float2 ret;
+				ret.x = v.x * rot.y - v.y * rot.x;
+				ret.y = v.x * rot.x + v.y * rot.y;
+				return ret;
+			}
+			
 			v2f o;
 
 			v2f vert (appdata_t v)
@@ -64,7 +72,9 @@ Shader "Hidden/Unlit/Transparent Masked 1"
 				o.color = v.color;
 				o.texcoord = v.texcoord;
 				o.texcoord1 = v.texcoord1;
-				o.worldPos = v.vertex.xy * _ClipRange0.zw + _ClipRange0.xy;
+				float2 pos = (ComputeScreenPos(o.vertex).xy - float2(0.5, 0.5)) * _ScreenParams.xy;
+				pos = Rotate(pos - _ClipRange0.xy, _ClipArgs0.zw);
+ 				o.worldPos = pos * _ClipRange0.zw; 
 				return o;
 			}
 
@@ -92,7 +102,7 @@ Shader "Hidden/Unlit/Transparent Masked 1"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 		
 		Pass

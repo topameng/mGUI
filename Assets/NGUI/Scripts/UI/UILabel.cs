@@ -88,19 +88,26 @@ public class UILabel : UIWidget
 	[System.NonSerialized] Font mActiveTTF = null;
 	[System.NonSerialized] float mDensity = 1f;
 	[System.NonSerialized] bool mShouldBeProcessed = true;
-	[System.NonSerialized] string mProcessedText = null;
-	[System.NonSerialized] bool mPremultiply = false;
+#if NGUI_BACKUP
+    [System.NonSerialized] string mProcessedText = null;
+#else
+    [System.NonSerialized] CString mProcessedText = new CString(4);
+#endif
+    [System.NonSerialized] bool mPremultiply = false;
 	[System.NonSerialized] Vector2 mCalculatedSize = Vector2.zero;
 	[System.NonSerialized] float mScale = 1f;
 	[System.NonSerialized] int mFinalFontSize = 0;
-	[System.NonSerialized] int mLastWidth = 0;
+
+#if NGUI_BACKUP
+    [System.NonSerialized] int mLastWidth = 0;
 	[System.NonSerialized] int mLastHeight = 0;
+#endif
 
-	/// <summary>
-	/// Font size after modifications got taken into consideration such as shrinking content.
-	/// </summary>
+    /// <summary>
+    /// Font size after modifications got taken into consideration such as shrinking content.
+    /// </summary>
 
-	public int finalFontSize
+    public int finalFontSize
 	{
 		get
 		{
@@ -869,34 +876,54 @@ public class UILabel : UIWidget
 				overflowMethod = Overflow.ShrinkContent;
 			}
 		}
-	}
+    }
 
-	/// <summary>
-	/// Returns the processed version of 'text', with new line characters, line wrapping, etc.
-	/// </summary>
+    /// <summary>
+    /// Returns the processed version of 'text', with new line characters, line wrapping, etc.
+    /// </summary>
 
+#if NGUI_BACKUP
 	public string processedText
 	{
 		get
-		{
-			if (mLastWidth != mWidth || mLastHeight != mHeight)
-			{
-				mLastWidth = mWidth;
-				mLastHeight = mHeight;
-				mShouldBeProcessed = true;
-			}
+		{            
+            if (mLastWidth != mWidth || mLastHeight != mHeight)
+            {
+                mLastWidth = mWidth;
+                mLastHeight = mHeight;
+                mShouldBeProcessed = true;
+            }
 
-			// Process the text if necessary
-			if (shouldBeProcessed) ProcessText();
+            // Process the text if necessary
+            if (shouldBeProcessed)
+            {
+                ProcessText();
+            }            
+
 			return mProcessedText;
 		}
 	}
+#else
+    public CString processedText
+    {
+        get
+        {
+            // Process the text if necessary
+            if (shouldBeProcessed)
+            {
+                ProcessText();
+            }
 
-	/// <summary>
-	/// Actual printed size of the text, in pixels.
-	/// </summary>
+            return mProcessedText;
+        }
+    }
+#endif
 
-	public Vector2 printedSize
+    /// <summary>
+    /// Actual printed size of the text, in pixels.
+    /// </summary>
+
+    public Vector2 printedSize
 	{
 		get
 		{
@@ -972,16 +999,19 @@ public class UILabel : UIWidget
 
 	protected override void OnDisable ()
 	{
-		SetActiveFont(null);
+        SetActiveFont(null);
 		mList.Remove(this);
 		base.OnDisable();
-	}
+#if USE_CHARMAP
+        charMap.Clear();
+#endif
+    }
 
-	/// <summary>
-	/// Set the active font, correctly setting and clearing callbacks.
-	/// </summary>
+    /// <summary>
+    /// Set the active font, correctly setting and clearing callbacks.
+    /// </summary>
 
-	protected void SetActiveFont (Font fnt)
+    protected void SetActiveFont (Font fnt)
 	{
 		if (mActiveTTF != fnt)
 		{
@@ -1069,9 +1099,12 @@ public class UILabel : UIWidget
 				Font fnt = lbl.trueTypeFont;
 
 				if (fnt == font)
-				{
-					fnt.RequestCharactersInTexture(lbl.printedText, lbl.mFinalFontSize, lbl.mFontStyle);
-					lbl.MarkAsChanged();
+				{                    
+                    fnt.RequestCharactersInTexture(lbl.printedText, lbl.mFinalFontSize, lbl.mFontStyle);
+#if USE_CHARMAP
+                    lbl.charMap.Clear();               
+#endif
+                    lbl.MarkAsChanged();                    
 
 					if (lbl.panel == null)
 						lbl.CreatePanel();
@@ -1219,7 +1252,7 @@ public class UILabel : UIWidget
 
 			shouldBeProcessed = true;
 			mAllowProcessing = true;
-			ProcessAndRequest();
+            ProcessAndRequest();
 			if (autoResizeBoxCollider) ResizeCollider();
 		}
 	}
@@ -1307,8 +1340,12 @@ public class UILabel : UIWidget
 
 		if (NGUIText.regionWidth < 1 || NGUIText.regionHeight < 0)
 		{
-			mProcessedText = "";
-			return;
+#if NGUI_BACKUP
+            mProcessedText = "";
+#else
+            mProcessedText.Clear();
+#endif
+            return;
 		}
 
 		bool isDynamic = (trueTypeFont != null);
@@ -1360,11 +1397,16 @@ public class UILabel : UIWidget
 
 				NGUIText.Update(false);
 
-				// Wrap the text
-				bool fits = NGUIText.WrapText(printedText, out mProcessedText, true, false,
+                // Wrap the text
+#if NGUI_BACKUP
+                bool fits = NGUIText.WrapText(printedText, out mProcessedText, true, false,
 					mOverflowEllipsis && mOverflow == Overflow.ClampContent);
+#else
+                bool fits = NGUIText.WrapText(printedText, ref mProcessedText, true, false,
+                    mOverflowEllipsis && mOverflow == Overflow.ClampContent);
+#endif
 
-				if (mOverflow == Overflow.ShrinkContent && !fits)
+                if (mOverflow == Overflow.ShrinkContent && !fits)
 				{
 					if (--ps > 1) continue;
 					else break;
@@ -1419,8 +1461,12 @@ public class UILabel : UIWidget
 		else
 		{
 			cachedTransform.localScale = Vector3.one;
-			mProcessedText = "";
-			mScale = 1f;
+#if NGUI_BACKUP
+            mProcessedText = "";
+#else
+            mProcessedText.Clear();
+#endif
+            mScale = 1f;
 		}
 		
 		if (full)
@@ -1527,10 +1573,17 @@ public class UILabel : UIWidget
 	{
 		if (isValid)
 		{
-			string text = processedText;
+#if NGUI_BACKUP
+            string text = processedText;
 			if (string.IsNullOrEmpty(text)) return 0;
+#else
+            CString text = processedText;
+            if (CString.IsNullOrEmpty(text)) return 0;
 
-			UpdateNGUIText();
+            NGUIText.Prepare(printedText);
+#endif
+
+            UpdateNGUIText();
 
 			if (precise) NGUIText.PrintExactCharacterPositions(text, mTempVerts, mTempIndices);
 			else NGUIText.PrintApproximateCharacterPositions(text, mTempVerts, mTempIndices);
@@ -1711,10 +1764,15 @@ public class UILabel : UIWidget
 	{
 		if (isValid)
 		{
-			string text = processedText;
+#if NGUI_BACKUP
+            string text = processedText;
 			if (string.IsNullOrEmpty(text)) return 0;
+#else
+            CString text = processedText;
+            if (CString.IsNullOrEmpty(text)) return 0;
+#endif
 
-			int def = defaultFontSize;
+            int def = defaultFontSize;
 			UpdateNGUIText();
 
 			NGUIText.PrintApproximateCharacterPositions(text, mTempVerts, mTempIndices);
@@ -1768,8 +1826,13 @@ public class UILabel : UIWidget
 		if (highlight != null) highlight.Clear();
 		if (!isValid) return;
 
-		string text = processedText;
-		UpdateNGUIText();
+#if NGUI_BACKUP
+        string text = processedText;
+#else
+        CString text = processedText;
+#endif
+
+        UpdateNGUIText();
 
 		int startingCaretVerts = caret.verts.Count;
 		Vector2 center = new Vector2(0.5f, 0.5f);
@@ -1824,13 +1887,20 @@ public class UILabel : UIWidget
 		
 		if (mFont != null && mFont.premultipliedAlphaShader) col = NGUITools.ApplyPMA(col);
 
-		string text = processedText;
-		int start = verts.Count;
-
-		UpdateNGUIText();
-
+#if !NGUI_BACKUP
+        CString text = processedText;
+        int start = verts.Count;
+        UpdateNGUIText();
 		NGUIText.tint = col;
-		NGUIText.Print(text, verts, uvs, cols);
+        NGUIText.Prepare(printedText);        
+#else
+        string text = processedText;
+        int start = verts.Count;
+
+        UpdateNGUIText();
+        NGUIText.tint = col;        
+#endif
+        NGUIText.Print(text, verts, uvs, cols);
 		NGUIText.bitmapFont = null;
 		NGUIText.dynamicFont = null;
 
@@ -1907,10 +1977,9 @@ public class UILabel : UIWidget
 		float fx = Mathf.Lerp(0f, -mWidth, po.x);
 		float fy = Mathf.Lerp(mHeight, 0f, po.y) + Mathf.Lerp((mCalculatedSize.y - mHeight), 0f, po.y);
 
-		fx = Mathf.Round(fx);
+        fx = Mathf.Round(fx);
 		fy = Mathf.Round(fy);
-
-		Vector3 v;
+        Vector3 v;
 
 		for (int i = start, imax = verts.Count; i < imax; ++i)
 		{
@@ -2032,11 +2101,15 @@ public class UILabel : UIWidget
 		return retVal;
 	}
 
-	/// <summary>
-	/// Update NGUIText.current with all the properties from this label.
-	/// </summary>
+    /// <summary>
+    /// Update NGUIText.current with all the properties from this label.
+    /// </summary>
 
-	public void UpdateNGUIText ()
+#if USE_CHARMAP
+    Dictionary<char, CharacterInfoCache> charMap = new Dictionary<char, CharacterInfoCache>();
+#endif
+
+    public void UpdateNGUIText ()
 	{
 		Font ttf = trueTypeFont;
 		bool isDynamic = (ttf != null);
@@ -2057,8 +2130,11 @@ public class UILabel : UIWidget
 		NGUIText.spacingX = effectiveSpacingX;
 		NGUIText.spacingY = effectiveSpacingY;
 		NGUIText.fontScale = isDynamic ? mScale : ((float)mFontSize / mFont.defaultSize) * mScale;
+#if USE_CHARMAP
+        NGUIText.charMap = charMap;
+#endif
 
-		if (mFont != null)
+        if (mFont != null)
 		{
 			NGUIText.bitmapFont = mFont;
 			
@@ -2069,12 +2145,15 @@ public class UILabel : UIWidget
 				NGUIText.bitmapFont = fnt;
 			}
 
-			if (NGUIText.bitmapFont.isDynamic)
-			{
-				NGUIText.dynamicFont = NGUIText.bitmapFont.dynamicFont;
-				NGUIText.bitmapFont = null;
-			}
-			else NGUIText.dynamicFont = null;
+            if (NGUIText.bitmapFont.isDynamic)
+            {
+                NGUIText.dynamicFont = NGUIText.bitmapFont.dynamicFont;
+                NGUIText.bitmapFont = null;
+            }
+            else
+            {
+                NGUIText.dynamicFont = null;
+            }
 		}
 		else
 		{

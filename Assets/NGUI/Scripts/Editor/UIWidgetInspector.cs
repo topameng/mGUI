@@ -911,7 +911,7 @@ public class UIWidgetInspector : UIRectEditor
 			SerializedProperty ratio = so.FindProperty("aspectRatio");
 			SerializedProperty aspect = so.FindProperty("keepAspectRatio");
 
-			GUILayout.BeginHorizontal();
+            GUILayout.BeginHorizontal();
 			{
 				if (!aspect.hasMultipleDifferentValues && aspect.intValue == 0)
 				{
@@ -934,7 +934,21 @@ public class UIWidgetInspector : UIRectEditor
 				}
 				GUILayout.EndHorizontal();
 			}
-			NGUIEditorTools.EndContents();
+
+#if !NGUI_BACKUP
+            GUI.changed = false;
+            GUILayout.BeginHorizontal();
+            SerializedProperty batch = so.FindProperty("mBatch");
+            NGUIEditorTools.DrawProperty("Batch Mode", batch, false, GUILayout.Width(150f));                        
+            GUILayout.EndHorizontal();
+
+            if (GUI.changed)
+            {
+                w.batch = (UIDrawCall.BatchMode)batch.intValue;
+            }
+#endif
+
+            NGUIEditorTools.EndContents();
 		}
 	}
 

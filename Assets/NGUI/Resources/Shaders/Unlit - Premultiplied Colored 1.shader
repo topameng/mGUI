@@ -14,7 +14,7 @@ Shader "Hidden/Unlit/Premultiplied Colored 1"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 		
 		Pass
@@ -52,13 +52,23 @@ Shader "Hidden/Unlit/Premultiplied Colored 1"
 				float2 worldPos : TEXCOORD1;
 			};
 
+			float2 Rotate (float2 v, float2 rot)
+			{
+				float2 ret;
+				ret.x = v.x * rot.y - v.y * rot.x;
+				ret.y = v.x * rot.x + v.y * rot.y;
+				return ret;
+			}
+
 			v2f vert (appdata_t v)
 			{
 				v2f o;
 				o.vertex = mul(UNITY_MATRIX_MVP, v.vertex);
 				o.color = v.color;
 				o.texcoord = v.texcoord;
-				o.worldPos = v.vertex.xy * _ClipRange0.zw + _ClipRange0.xy;
+				float2 pos = (ComputeScreenPos(o.vertex).xy - float2(0.5, 0.5)) * _ScreenParams.xy;
+				pos = Rotate(pos - _ClipRange0.xy, _ClipArgs0.zw);
+ 				o.worldPos = pos * _ClipRange0.zw;   
 				return o;
 			}
 

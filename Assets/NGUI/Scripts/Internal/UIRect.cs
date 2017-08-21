@@ -25,7 +25,7 @@ public abstract class UIRect : MonoBehaviour
 		[System.NonSerialized]
 		public Camera targetCam;
 
-		public AnchorPoint () { }
+        public AnchorPoint () { }
 		public AnchorPoint (float relative) { this.relative = relative; }
 
 		/// <summary>
@@ -161,14 +161,18 @@ public abstract class UIRect : MonoBehaviour
 		OnStart,
 	}
 
-	/// <summary>
-	/// Whether anchors will be recalculated on every update.
-	/// </summary>
+    /// <summary>
+    /// Whether anchors will be recalculated on every update.
+    /// </summary>
 
-	public AnchorUpdate updateAnchors = AnchorUpdate.OnUpdate;
+#if NGUI_BACKUP
+    public AnchorUpdate updateAnchors = AnchorUpdate.OnUpdate;
+#else
+    public AnchorUpdate updateAnchors = AnchorUpdate.OnEnable;
+#endif
 
-	[System.NonSerialized] protected GameObject mGo;
-	[System.NonSerialized] protected Transform mTrans;
+    [System.NonSerialized] protected GameObject mGo;
+    [System.NonSerialized] protected Transform mTrans;
 	[System.NonSerialized] protected BetterList<UIRect> mChildren = new BetterList<UIRect>();
 	[System.NonSerialized] protected bool mChanged = true;
 	[System.NonSerialized] protected bool mParentFound = false;
@@ -182,12 +186,15 @@ public abstract class UIRect : MonoBehaviour
 
 	// Marking it as NonSerialized will cause widgets to disappear when code recompiles in edit mode
 	protected bool mStarted = false;
+#if !NGUI_BACKUP
+    protected bool hideFlag = false;
+#endif
 
-	/// <summary>
-	/// Final calculated alpha.
-	/// </summary>
+    /// <summary>
+    /// Final calculated alpha.
+    /// </summary>
 
-	[System.NonSerialized] public float finalAlpha = 1f;
+    [System.NonSerialized] public float finalAlpha = 1f;
 
 	/// <summary>
 	/// Game object gets cached for speed. Can't simply return 'mGo' set in Awake because this function may be called on a prefab.
@@ -195,17 +202,17 @@ public abstract class UIRect : MonoBehaviour
 
 	public GameObject cachedGameObject { get { if (mGo == null) mGo = gameObject; return mGo; } }
 
-	/// <summary>
-	/// Transform gets cached for speed. Can't simply return 'mTrans' set in Awake because this function may be called on a prefab.
-	/// </summary>
+    /// <summary>
+    /// Transform gets cached for speed. Can't simply return 'mTrans' set in Awake because this function may be called on a prefab.
+    /// </summary>
 
 	public Transform cachedTransform { get { if (mTrans == null) mTrans = transform; return mTrans; } }
 
-	/// <summary>
-	/// Camera used by anchors.
-	/// </summary>
+    /// <summary>
+    /// Camera used by anchors.
+    /// </summary>
 
-	public Camera anchorCamera { get { if (!mAnchorsCached) ResetAnchors(); return mCam; } }
+    public Camera anchorCamera { get { if (!mAnchorsCached) ResetAnchors(); return mCam; } }
 
 	/// <summary>
 	/// Whether the rectangle is currently anchored fully on all sides.
@@ -398,7 +405,8 @@ public abstract class UIRect : MonoBehaviour
 #if UNITY_EDITOR
 		mEnabled = true;
 #endif
-		mUpdateFrame = -1;
+        mTrans = transform;
+        mUpdateFrame = -1;
 		
 		if (updateAnchors == AnchorUpdate.OnEnable)
 		{
@@ -467,7 +475,11 @@ public abstract class UIRect : MonoBehaviour
 
 	public void Update ()
 	{
-		if (!mAnchorsCached) ResetAnchors();
+#if !NGUI_BACKUP
+        if (hideFlag) return;
+#endif
+
+        if (!mAnchorsCached) ResetAnchors();
 
 		int frame = Time.frameCount;
 

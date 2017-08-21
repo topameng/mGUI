@@ -73,9 +73,9 @@ public class UIWrapContent : MonoBehaviour
 	/// </summary>
 
 	protected virtual void Start ()
-	{
-		SortBasedOnScrollMovement();
-		WrapContent();
+	{        
+        SortBasedOnScrollMovement();
+        WrapContent();
 		if (mScroll != null) mScroll.GetComponent<UIPanel>().onClipMove = OnMove;
 		mFirstTime = false;
 	}
@@ -84,7 +84,10 @@ public class UIWrapContent : MonoBehaviour
 	/// Callback triggered by the UIPanel when its clipping region moves (for example when it's being scrolled).
 	/// </summary>
 
-	protected virtual void OnMove (UIPanel panel) { WrapContent(); }
+	protected virtual void OnMove (UIPanel panel)
+    {
+        WrapContent();
+    }
 
 	/// <summary>
 	/// Immediately reposition all children.
@@ -179,7 +182,7 @@ public class UIWrapContent : MonoBehaviour
 			corners[i] = v;
 		}
 		
-		Vector3 center = Vector3.Lerp(corners[0], corners[2], 0.5f);
+		Vector3 center = Vector3.Lerp(corners[0], corners[2], 0.5f);        
 		bool allWithinRange = true;
 		float ext2 = extents * 2f;
 
@@ -196,9 +199,13 @@ public class UIWrapContent : MonoBehaviour
 				if (distance < -extents)
 				{
 					Vector3 pos = t.localPosition;
-					pos.x += ext2;
-					distance = pos.x - center.x;
-					int realIndex = Mathf.RoundToInt(pos.x / itemSize);
+                    do
+                    {
+                        pos.x += ext2;
+                        distance = pos.x - center.x;
+                    }
+                    while (distance < -extents);
+                    int realIndex = Mathf.RoundToInt(pos.x / itemSize);
 
 					if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
 					{
@@ -210,9 +217,13 @@ public class UIWrapContent : MonoBehaviour
 				else if (distance > extents)
 				{
 					Vector3 pos = t.localPosition;
-					pos.x -= ext2;
-					distance = pos.x - center.x;
-					int realIndex = Mathf.RoundToInt(pos.x / itemSize);
+                    do
+                    {
+                        pos.x -= ext2;
+                        distance = pos.x - center.x;
+                    }
+                    while (distance > extents);
+                    int realIndex = Mathf.RoundToInt(pos.x / itemSize);
 
 					if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
 					{
@@ -244,9 +255,13 @@ public class UIWrapContent : MonoBehaviour
 				if (distance < -extents)
 				{
 					Vector3 pos = t.localPosition;
-					pos.y += ext2;
-					distance = pos.y - center.y;
-					int realIndex = Mathf.RoundToInt(pos.y / itemSize);
+                    do
+                    {
+                        pos.y += ext2;
+                        distance = pos.y - center.y;
+                    }
+                    while (distance < -extents);
+                    int realIndex = Mathf.RoundToInt(pos.y / itemSize);
 
 					if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
 					{
@@ -258,9 +273,13 @@ public class UIWrapContent : MonoBehaviour
 				else if (distance > extents)
 				{
 					Vector3 pos = t.localPosition;
-					pos.y -= ext2;
-					distance = pos.y - center.y;
-					int realIndex = Mathf.RoundToInt(pos.y / itemSize);
+                    do
+                    {
+                        pos.y -= ext2;
+                        distance = pos.y - center.y;
+                    }
+                    while (distance > extents);
+                    int realIndex = Mathf.RoundToInt(pos.y / itemSize);
 
 					if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
 					{

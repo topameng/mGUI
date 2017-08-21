@@ -653,14 +653,14 @@ public class UIInput : MonoBehaviour
 			if (pf == RuntimePlatform.IPhonePlayer
 				|| pf == RuntimePlatform.Android
 				|| pf == RuntimePlatform.WP8Player
- #if UNITY_4_3
+#if UNITY_4_3
 				|| pf == RuntimePlatform.BB10Player
- #else
-				|| pf == RuntimePlatform.BlackBerryPlayer
-				|| pf == RuntimePlatform.MetroPlayerARM
-				|| pf == RuntimePlatform.MetroPlayerX64
-				|| pf == RuntimePlatform.MetroPlayerX86
- #endif
+#else
+				//|| pf == RuntimePlatform.BlackBerryPlayer
+				|| pf == RuntimePlatform.WSAPlayerARM
+				|| pf == RuntimePlatform.WSAPlayerX64
+				|| pf == RuntimePlatform.WSAPlayerX86
+#endif
 			)
 			{
 				string val;
@@ -698,8 +698,8 @@ public class UIInput : MonoBehaviour
 			}
 			else
 #endif // MOBILE
-			{
-				Vector2 pos = (UICamera.current != null && UICamera.current.cachedCamera != null) ?
+            {
+                Vector2 pos = (UICamera.current != null && UICamera.current.cachedCamera != null) ?
 					UICamera.current.cachedCamera.WorldToScreenPoint(label.worldCorners[0]) :
 					label.worldCorners[0];
 				pos.y = Screen.height - pos.y;
@@ -787,12 +787,16 @@ public class UIInput : MonoBehaviour
 		if (mCaret != null && mNextBlink < RealTime.time)
 		{
 			mNextBlink = RealTime.time + 0.5f;
-			mCaret.enabled = !mCaret.enabled;
-		}
+#if NGUI_BACKUP
+            mCaret.enabled = !mCaret.enabled;
+#else
+            mCaret.Switch(); 
+#endif
+        }
 
-		// If the label's final alpha changes, we need to update the drawn geometry,
-		// or the highlight widgets (which have their geometry set manually) won't update.
-		if (isSelected && mLastAlpha != label.finalAlpha)
+        // If the label's final alpha changes, we need to update the drawn geometry,
+        // or the highlight widgets (which have their geometry set manually) won't update.
+        if (isSelected && mLastAlpha != label.finalAlpha)
 			UpdateLabel();
 
 		// Cache the camera
@@ -1389,24 +1393,33 @@ public class UIInput : MonoBehaviour
 				if (mBlankTex == null)
 				{
 					mBlankTex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                    mBlankTex.name = "test";
 					for (int y = 0; y < 2; ++y)
 						for (int x = 0; x < 2; ++x)
 							mBlankTex.SetPixel(x, y, Color.white);
 					mBlankTex.Apply();
 				}
 
-				// Create the selection highlight
-				if (start != end)
+#if !NGUI_BACKUP
+                int depth = NGUITools.CalculateNextDepth(label.cachedGameObject);   //设置成相同的depth
+#endif
+
+                // Create the selection highlight
+                if (start != end)
 				{
 					if (mHighlight == null)
 					{
-						mHighlight = NGUITools.AddWidget<UITexture>(label.cachedGameObject);
-						mHighlight.name = "Input Highlight";
-						mHighlight.mainTexture = mBlankTex;
-						mHighlight.fillGeometry = false;
+						mHighlight = NGUITools.AddWidget<UITexture>(label.cachedGameObject);                        
+                        mHighlight.name = "Input Highlight";
+#if !NGUI_BACKUP
+                        mHighlight.depth = depth;
+                        mHighlight.batch = UIDrawCall.BatchMode.Dynamic;
+#endif
+                        mHighlight.mainTexture = mBlankTex;                        
+                        mHighlight.fillGeometry = false;
 						mHighlight.pivot = label.pivot;
-						mHighlight.SetAnchor(label.cachedTransform);
-					}
+						mHighlight.SetAnchor(label.cachedTransform);                        
+                    }
 					else
 					{
 						mHighlight.pivot = label.pivot;
@@ -1419,13 +1432,17 @@ public class UIInput : MonoBehaviour
 				// Create the carter
 				if (mCaret == null)
 				{
-					mCaret = NGUITools.AddWidget<UITexture>(label.cachedGameObject);
-					mCaret.name = "Input Caret";
-					mCaret.mainTexture = mBlankTex;
-					mCaret.fillGeometry = false;
-					mCaret.pivot = label.pivot;
-					mCaret.SetAnchor(label.cachedTransform);
-				}
+					mCaret = NGUITools.AddWidget<UITexture>(label.cachedGameObject);                    
+                    mCaret.name = "Input Caret";
+#if !NGUI_BACKUP
+                    mCaret.depth = depth;
+                    mCaret.batch = UIDrawCall.BatchMode.Dynamic;
+#endif
+                    mCaret.mainTexture = mBlankTex;                    
+                    mCaret.fillGeometry = false;
+					mCaret.pivot = label.pivot;                    
+                    mCaret.SetAnchor(label.cachedTransform);                    
+                }
 				else
 				{
 					mCaret.pivot = label.pivot;

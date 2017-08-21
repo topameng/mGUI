@@ -2,9 +2,11 @@
 //            NGUI: Next-Gen UI kit
 // Copyright © 2011-2016 Tasharen Entertainment
 //----------------------------------------------
-
+//#define DEBUG_REBUILD
+#define SHOW_HIDDEN_OBJECTS
 using UnityEngine;
 using System.Collections.Generic;
+using BatchMode = UIDrawCall.BatchMode;
 
 /// <summary>
 /// UI Panel is responsible for collecting, sorting and updating widgets in addition to generating widgets' geometry.
@@ -216,11 +218,17 @@ public class UIPanel : UIRect
 	bool mSortWidgets = false;
 	bool mUpdateScroll = false;
 
-	/// <summary>
-	/// Helper property that returns the first unused depth value.
-	/// </summary>
+#if !NGUI_BACKUP
+    bool fastHideFlag = false;
+	Transform panelRoot = null;
+    GameObject panelGo = null;
+#endif
 
-	static public int nextUnusedDepth
+    /// <summary>
+    /// Helper property that returns the first unused depth value.
+    /// </summary>
+
+    static public int nextUnusedDepth
 	{
 		get
 		{
@@ -966,9 +974,8 @@ public class UIPanel : UIRect
 	protected override void Awake ()
 	{
 		base.Awake();
-
 #if !UNITY_5_5_OR_NEWER
-		mHalfPixelOffset = (Application.platform == RuntimePlatform.WindowsPlayer ||
+        mHalfPixelOffset = (Application.platform == RuntimePlatform.WindowsPlayer ||
  #if !UNITY_5_4
 			Application.platform == RuntimePlatform.WindowsWebPlayer ||
  #endif
@@ -1007,19 +1014,38 @@ public class UIPanel : UIRect
 		mLayer = cachedGameObject.layer;
 	}
 
-	/// <summary>
-	/// Reset the frame IDs.
-	/// </summary>
+    /// <summary>
+    /// Reset the frame IDs.
+    /// </summary>
 
-	protected override void OnEnable ()
-	{
-		mRebuild = true;
-		mAlphaFrameID = -1;
-		mMatrixFrame = -1;
-		OnStart();
-		base.OnEnable();
-		mMatrixFrame = -1;
-	}
+    protected override void OnEnable()
+    {
+#if !NGUI_BACKUP
+        if (panelGo == null)
+        {
+#if UNITY_EDITOR
+            // If we're in the editor, create the game object with hide flags set right away
+            panelGo = UnityEditor.EditorUtility.CreateGameObjectWithHideFlags("_UI_" + name,
+#if SHOW_HIDDEN_OBJECTS
+            HideFlags.DontSave, new System.Type[0] { });
+#else
+            HideFlags.HideAndDontSave, new System.Type[0] { });
+#endif
+#else            
+		    panelGo = new GameObject(name);
+            DontDestroyOnLoad(panelGo);
+#endif            
+            panelGo.layer = gameObject.layer;
+            panelRoot = panelGo.transform;
+        }
+#endif
+        mRebuild = true;
+        mAlphaFrameID = -1;
+        mMatrixFrame = -1;
+        OnStart();
+        base.OnEnable();
+        mMatrixFrame = -1;
+    }
 
 	/// <summary>
 	/// Mark all widgets as having been changed so the draw calls get re-created.
@@ -1066,37 +1092,152 @@ public class UIPanel : UIRect
 		list.Sort(CompareFunc);
 	}
 
-	/// <summary>
-	/// Destroy all draw calls we've created when this script gets disabled.
-	/// </summary>
+    /// <summary>
+    /// Destroy all draw calls we've created when this script gets disabled.
+    /// </summary>
 
-	protected override void OnDisable ()
-	{
-		for (int i = 0, imax = drawCalls.Count; i < imax; ++i)
-		{
-			UIDrawCall dc = drawCalls[i];
-			if (dc != null) UIDrawCall.Destroy(dc);
-		}
-		
-		drawCalls.Clear();
-		list.Remove(this);
+    protected override void OnDisable()
+    {
+#if !NGUI_BACKUP
+        fastHideFlag = false;
+#endif
 
-		mAlphaFrameID = -1;
-		mMatrixFrame = -1;
-		
-		if (list.Count == 0)
-		{
-			UIDrawCall.ReleaseAll();
-			mUpdateFrame = -1;
-		}
-		base.OnDisable();
-	}
+        for (int i = 0, imax = drawCalls.Count; i < imax; ++i)
+        {
+            UIDrawCall dc = drawCalls[i];
 
-	/// <summary>
-	/// Update the world-to-local transform matrix as well as clipping bounds.
-	/// </summary>
+            if (dc != null)
+            {                
+                UIDrawCall.Destroy(dc);
+            }
+        }
 
-	void UpdateTransformMatrix ()
+        drawCalls.Clear();
+        list.Remove(this);
+
+        mAlphaFrameID = -1;
+        mMatrixFrame = -1;
+
+        if (list.Count == 0)
+        {
+            UIDrawCall.ReleaseAll();
+            mUpdateFrame = -1;
+        }
+
+#if !NGUI_BACKUP
+        NGUITools.DestroyImmediate(panelGo);
+        panelGo = null;
+#endif
+        base.OnDisable();
+    }
+
+#if !NGUI_BACKUP    
+    void OnApplicationQuit()
+    {
+        if (panelRoot != null)
+        {
+            for (int i = 0; i < panelRoot.childCount; i++)
+            {
+                Transform node = panelRoot.GetChild(i);
+                node.parent = null;
+            }
+        }
+
+        NGUITools.DestroyImmediate(panelGo);
+    }
+#endif
+
+#if NGUI_BACKUP
+    public void Hide()
+    {        
+        gameObject.SetActive(false);
+    }
+
+    public void Show()
+    {        
+        gameObject.SetActive(true);
+    }
+
+    public bool IsVisible()
+    {
+        return gameObject.activeSelf;
+    }
+
+    public void Show(bool flag)
+    {
+        if (!gameObject.activeSelf)
+        {
+            Show();
+        }
+        else
+        {
+            Hide();
+        }
+    }
+#else
+    public void Hide()
+    {
+        fastHideFlag = true;
+        int count = drawCalls.Count;
+
+        for (int i = 0; i < count; ++i)
+        {
+            UIDrawCall dc = drawCalls[i];
+
+            if (dc != null)
+            {
+                dc.Renderer.enabled = false;
+            }
+        }
+    }
+
+    public void Show()
+    {
+        if (!gameObject.activeSelf)
+        {
+            fastHideFlag = false;
+            gameObject.SetActive(true);
+        }
+        else
+        {
+            fastHideFlag = false;
+            int count = drawCalls.Count;
+
+            for (int i = 0; i < count; ++i)
+            {
+                UIDrawCall dc = drawCalls[i];
+
+                if (dc != null)
+                {
+                    dc.Renderer.enabled = true;
+                }
+            }
+        }
+    }   
+
+    public bool IsVisible()
+    {
+        return !fastHideFlag;
+    }
+
+    public void Show(bool flag)
+    {
+        if (flag && fastHideFlag)
+        {
+            Show();
+        }
+        else if(!flag && !fastHideFlag)
+        {
+            Hide();
+        }
+    } 
+#endif
+
+    /// <summary>
+    /// Update the world-to-local transform matrix as well as clipping bounds.
+    /// </summary>
+
+    void UpdateTransformMatrix ()
 	{
 		int fc = Time.frameCount;
 
@@ -1262,24 +1403,27 @@ public class UIPanel : UIRect
 #endif
 		{
 			mUpdateFrame = Time.frameCount;
-
+            
 			// Update each panel in order
 			for (int i = 0, imax = list.Count; i < imax; ++i)
 				list[i].UpdateSelf();
 
-			int rq = 3000;
+			int rq = 3000;            
 
-			// Update all draw calls, making them draw in the right order
-			for (int i = 0, imax = list.Count; i < imax; ++i)
+            // Update all draw calls, making them draw in the right order
+            for (int i = 0, imax = list.Count; i < imax; ++i)
 			{
 				UIPanel p = list[i];
-
+#if !NGUI_BACKUP
+                if (p.fastHideFlag) continue;
+#endif
 				if (p.renderQueue == RenderQueue.Automatic)
 				{
 					p.startingRenderQueue = rq;
 					p.UpdateDrawCalls(i);
-					rq += p.drawCalls.Count;
-				}
+                    rq += p.drawCalls.Count;
+                    rq += 10;                           //给粒子系统让10个层次
+                }
 				else if (p.renderQueue == RenderQueue.StartAt)
 				{
 					p.UpdateDrawCalls(i);
@@ -1292,11 +1436,15 @@ public class UIPanel : UIRect
 					if (p.drawCalls.Count != 0)
 						rq = Mathf.Max(rq, p.startingRenderQueue + 1);
 				}
-			}
+			}            
 		}
 	}
 
-	[System.NonSerialized]
+#if DEBUG_REBUILD
+    bool beCheckRebuild = false;
+#endif
+
+    [System.NonSerialized]
 	bool mHasMoved = false;
 
 	/// <summary>
@@ -1305,18 +1453,32 @@ public class UIPanel : UIRect
 
 	void UpdateSelf ()
 	{
-		mHasMoved = cachedTransform.hasChanged;
+#if !NGUI_BACKUP
+        if (fastHideFlag)
+        {
+            return;
+        }
+#endif
+        mHasMoved = cachedTransform.hasChanged;
 
-		UpdateTransformMatrix();
+        UpdateTransformMatrix();
 		UpdateLayers();
-		UpdateWidgets();
-
-		if (mRebuild)
+        UpdateWidgets();                
+        
+        if (mRebuild)
 		{
 			mRebuild = false;
 			FillAllDrawCalls();
-		}
-		else
+#if DEBUG_REBUILD
+            if (beCheckRebuild)
+            {                
+                Debug.LogWarning("Rebuild UI DrawCalls: " + name);
+            }
+
+            beCheckRebuild = true;
+#endif
+        }
+        else
 		{
 			for (int i = 0; i < drawCalls.Count; )
 			{
@@ -1343,7 +1505,7 @@ public class UIPanel : UIRect
 		{
 			mHasMoved = false;
 			mTrans.hasChanged = false;
-		}
+		}        
 	}
 
 	/// <summary>
@@ -1369,79 +1531,130 @@ public class UIPanel : UIRect
 		Material mat = null;
 		Texture tex = null;
 		Shader sdr = null;
-		UIDrawCall dc = null;
+        UIDrawCall dc = null;
 		int count = 0;
+#if !NGUI_BACKUP
+        BatchMode batch = BatchMode.Static;        
+#endif
 
-		if (mSortWidgets) SortWidgets();
+        if (mSortWidgets) SortWidgets();
 
 		for (int i = 0; i < widgets.Count; ++i)
 		{
 			UIWidget w = widgets[i];
 
-			if (w.isVisible && w.hasVertices)
-			{
-				Material mt = w.material;
-				
-				if (onCreateMaterial != null) mt = onCreateMaterial(w, mt);
+            if (w.isVisible && w.hasVertices)
+            {
+                Material mt = w.material;
 
-				Texture tx = w.mainTexture;
-				Shader sd = w.shader;
+                if (onCreateMaterial != null) mt = onCreateMaterial(w, mt);
 
-				if (mat != mt || tex != tx || sdr != sd)
-				{
-					if (dc != null && dc.verts.Count != 0)
-					{
-						drawCalls.Add(dc);
-						dc.UpdateGeometry(count);
-						dc.onRender = mOnRender;
-						mOnRender = null;
-						count = 0;
-						dc = null;
-					}
+                Texture tx = w.mainTexture;
+                Shader sd = w.shader;
 
-					mat = mt;
-					tex = tx;
-					sdr = sd;
-				}
+                if (mat != mt || tex != tx || sdr != sd)
+                {
+                    if (dc != null && dc.verts.Count != 0)
+                    {
+                        drawCalls.Add(dc);
+                        dc.UpdateGeometry(count);
+#if !NGUI_BACKUP                                                
+                        dc.UpdateRender();
+#endif
+                        dc.onRender = mOnRender;
+                        mOnRender = null;
+                        count = 0;                        
+                    }
 
-				if (mat != null || sdr != null || tex != null)
-				{
-					if (dc == null)
-					{
-						dc = UIDrawCall.Create(this, mat, tex, sdr);
-						dc.depthStart = w.depth;
-						dc.depthEnd = dc.depthStart;
-						dc.panel = this;
-						dc.onCreateDrawCall = onCreateDrawCall;
-					}
-					else
-					{
-						int rd = w.depth;
-						if (rd < dc.depthStart) dc.depthStart = rd;
-						if (rd > dc.depthEnd) dc.depthEnd = rd;
-					}
+                    dc = null;
+                    mat = mt;
+                    tex = tx;
+                    sdr = sd;                    
+                }
+#if !NGUI_BACKUP
+                else if (batch != BatchMode.Static || w.batch != batch)
+                {
+                    if (dc != null && dc.verts.Count != 0)
+                    {
+                        drawCalls.Add(dc);                        
+                        dc.UpdateGeometry(count);
+                        dc.UpdateRender();
+                        dc.onRender = mOnRender;                        
+                        mOnRender = null;                                                
+                        count = 0;                        
+                    }
 
-					w.drawCall = dc;
+                    if (batch != BatchMode.Dynamic || w.batch != BatchMode.Dynamic)
+                    {
+                        dc = null;
+                    }
+                }
+#endif
 
-					++count;
-					if (generateNormals) w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, dc.norms, dc.tans, generateUV2 ? dc.uv2 : null);
-					else w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, null, null, generateUV2 ? dc.uv2 : null);
+                if (mat != null || sdr != null || tex != null)
+                {
+#if NGUI_BACKUP
+                    if (dc == null)
+                    {
+                        dc = UIDrawCall.Create(this, mat, tex, sdr);
+#else
+                    if (w.batch != BatchMode.Static || dc == null)
+                    {
+                        if (dc != null && w.batch == BatchMode.Dynamic && batch == BatchMode.Dynamic)
+                        {                            
+                            dc = UIDrawCall.Clone(dc);                            
+                        }
+                        else
+                        {
+                            dc = UIDrawCall.Create(this, mat, tex, sdr);                            
+                            dc.batch = w.batch;
+                        }
 
-					if (w.mOnRender != null)
-					{
-						if (mOnRender == null) mOnRender = w.mOnRender;
-						else mOnRender += w.mOnRender;
-					}
-				}
-			}
-			else w.drawCall = null;
+                        dc.cachedTransform.parent = panelRoot;
+                        NGUITools.Identity(dc.cachedTransform);
+#endif
+                        dc.depthStart = w.depth;
+                        dc.depthEnd = dc.depthStart;
+                        dc.panel = this;                        
+                        dc.onCreateDrawCall = onCreateDrawCall;
+                    }
+                    else
+                    {
+                        int rd = w.depth;
+                        if (rd < dc.depthStart) dc.depthStart = rd;
+                        if (rd > dc.depthEnd) dc.depthEnd = rd;
+                    }
+
+                    w.drawCall = dc;
+#if !NGUI_BACKUP
+                    batch = w.batch;
+                    w.UpateDrawCall();
+#endif
+                    ++count;                    
+                    if (generateNormals) w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, dc.norms, dc.tans, generateUV2 ? dc.uv2 : null);
+                    else w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, null, null, generateUV2 ? dc.uv2 : null);
+
+                    if (w.mOnRender != null)
+                    {
+                        if (mOnRender == null) mOnRender = w.mOnRender;
+                        else mOnRender += w.mOnRender;
+                    }
+                }
+            }
+            else
+            {
+                w.drawCall = null;
+            }
 		}
 
 		if (dc != null && dc.verts.Count != 0)
 		{
 			drawCalls.Add(dc);
 			dc.UpdateGeometry(count);
-			dc.onRender = mOnRender;
+#if !NGUI_BACKUP
+            dc.UpdateRender();
+#endif
+            dc.onRender = mOnRender;
 			mOnRender = null;
 		}
 	}
@@ -1474,20 +1687,23 @@ public class UIPanel : UIRect
 
 				if (w.drawCall == dc)
 				{
-					if (w.isVisible && w.hasVertices)
-					{
-						++count;
-						
-						if (generateNormals) w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, dc.norms, dc.tans, generateUV2 ? dc.uv2 : null);
-						else w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, null, null, generateUV2 ? dc.uv2 : null);
+                    if (w.isVisible && w.hasVertices)
+                    {
+                        ++count;                        
 
-						if (w.mOnRender != null)
-						{
-							if (mOnRender == null) mOnRender = w.mOnRender;
-							else mOnRender += w.mOnRender;
-						}
-					}
-					else w.drawCall = null;
+                        if (generateNormals) w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, dc.norms, dc.tans, generateUV2 ? dc.uv2 : null);
+                        else w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, null, null, generateUV2 ? dc.uv2 : null);
+
+                        if (w.mOnRender != null)
+                        {
+                            if (mOnRender == null) mOnRender = w.mOnRender;
+                            else mOnRender += w.mOnRender;
+                        }
+                    }
+                    else
+                    {
+                        w.drawCall = null;
+                    }
 				}
 				++i;
 			}
@@ -1495,7 +1711,10 @@ public class UIPanel : UIRect
 			if (dc.verts.Count != 0)
 			{
 				dc.UpdateGeometry(count);
-				dc.onRender = mOnRender;
+#if !NGUI_BACKUP
+                dc.UpdateRender();
+#endif
+                dc.onRender = mOnRender;
 				mOnRender = null;
 				return true;
 			}
@@ -1518,14 +1737,20 @@ public class UIPanel : UIRect
 			drawCallClipRange.z *= 0.5f;
 			drawCallClipRange.w *= 0.5f;
 		}
-		else drawCallClipRange = Vector4.zero;
+		else drawCallClipRange = Vector4.zero;		
 
-		int w = Screen.width;
-		int h = Screen.height;
+        // Legacy functionality
+        if (drawCallClipRange.z == 0f)
+        {
+            int w = Screen.width;
+            drawCallClipRange.z = w * 0.5f;
+        }
 
-		// Legacy functionality
-		if (drawCallClipRange.z == 0f) drawCallClipRange.z = w * 0.5f;
-		if (drawCallClipRange.w == 0f) drawCallClipRange.w = h * 0.5f;
+        if (drawCallClipRange.w == 0f)
+        {
+            int h = Screen.height;
+            drawCallClipRange.w = h * 0.5f;
+        }
 
 		// DirectX 9 half-pixel offset
 		if (halfPixelOffset)
@@ -1552,23 +1777,34 @@ public class UIPanel : UIRect
 		}
 		else pos = trans.position;
 
-		Quaternion rot = trans.rotation;
+#if NGUI_BACKUP
+        Quaternion rot = trans.rotation;                
 		Vector3 scale = trans.lossyScale;
+#else
+        panelRoot.position = pos;
+        panelRoot.rotation = trans.rotation;
+        panelRoot.localScale = trans.lossyScale;
+#endif
 
-		for (int i = 0; i < drawCalls.Count; ++i)
+        for (int i = 0; i < drawCalls.Count; ++i)
 		{
 			UIDrawCall dc = drawCalls[i];
-
-			Transform t = dc.cachedTransform;
+#if NGUI_BACKUP
+            Transform t = dc.cachedTransform;
 			t.position = pos;
-			t.rotation = rot;
+            t.rotation = rot;
 			t.localScale = scale;
-
-			dc.renderQueue = (renderQueue == RenderQueue.Explicit) ? startingRenderQueue : startingRenderQueue + i;
+#endif
+            dc.renderQueue = (renderQueue == RenderQueue.Explicit) ? startingRenderQueue : startingRenderQueue + i;
 			dc.alwaysOnScreen = alwaysOnScreen &&
 				(mClipping == UIDrawCall.Clipping.None || mClipping == UIDrawCall.Clipping.ConstrainButDontClip);
 			dc.sortingOrder = (mSortingOrder == 0) ? sortOrder : mSortingOrder;
-			dc.sortingLayerName = mSortingLayerName;
+
+            if (!string.IsNullOrEmpty(mSortingLayerName))
+            {
+                dc.sortingLayerName = mSortingLayerName;
+            }
+
 			dc.clipTexture = mClipTexture;
 #if !UNITY_4_7
 			dc.shadowMode = shadowMode;
@@ -1671,8 +1907,7 @@ public class UIPanel : UIRect
 					}
 				}
 #endif
-				
-
+				                
 				// First update the widget's transform
 				if (w.UpdateTransform(frame) || mResized || (mHasMoved && !alwaysOnScreen))
 				{
@@ -1689,9 +1924,18 @@ public class UIPanel : UIRect
 
 					if (!mRebuild)
 					{
-						// Find an existing draw call, if possible
-						if (w.drawCall != null) w.drawCall.isDirty = true;
-						else FindDrawCall(w);
+                        // Find an existing draw call, if possible
+                        if (w.drawCall != null)
+                        {
+                            w.drawCall.isDirty = true;
+//#if DEBUG_REBUILD
+//                            Debug.LogWarning("Rebuild dc " + w.drawCall.name + "for: " + w.name, w.gameObject);
+//#endif
+                        }
+                        else
+                        {
+                            FindDrawCall(w);                            
+                        }
 					}
 				}
 			}
@@ -1702,13 +1946,62 @@ public class UIPanel : UIRect
 		mResized = false;
 	}
 
-	/// <summary>
-	/// Insert the specified widget into one of the existing draw calls if possible.
-	/// If it's not possible, and a new draw call is required, 'null' is returned
-	/// because draw call creation is a delayed operation.
-	/// </summary>
-
+    /// <summary>
+    /// Insert the specified widget into one of the existing draw calls if possible.
+    /// If it's not possible, and a new draw call is required, 'null' is returned
+    /// because draw call creation is a delayed operation.
+    /// </summary>
+#if NGUI_BACKUP
 	public UIDrawCall FindDrawCall (UIWidget w)
+    {
+        Material mat = w.material;
+        Texture tex = w.mainTexture;
+        int depth = w.depth;
+
+        for (int i = 0; i < drawCalls.Count; ++i)
+        {
+            UIDrawCall dc = drawCalls[i];
+            int dcStart = (i == 0) ? int.MinValue : drawCalls[i - 1].depthEnd + 1;
+            int dcEnd = (i + 1 == drawCalls.Count) ? int.MaxValue : drawCalls[i + 1].depthStart - 1;
+
+            if (dcStart <= depth && dcEnd >= depth)
+            {
+                if (dc.baseMaterial == mat && dc.mainTexture == tex)
+                {
+                    if (w.isVisible)
+                    {
+                        w.drawCall = dc;
+                        if (w.hasVertices)
+                        {
+                            dc.isDirty = true;
+#if DEBUG_REBUILD
+                            Debug.LogWarning("build dc " + dc.name + "for: " + w.name, w.gameObject);
+#endif
+                        }
+                        return dc;
+                    }
+                }
+                else
+                {
+                    mRebuild = true;
+#if DEBUG_REBUILD
+                    Debug.LogWarning("FindDrawCall dc fail: " + w.name, w.gameObject);
+#endif
+                }
+                return null;
+            }
+        }
+        mRebuild = true;
+#if DEBUG_REBUILD
+        if (beCheckRebuild)
+        {
+            Debug.LogWarning("FindDrawCall fail: " + w.name, w.gameObject);
+        }
+#endif
+        return null;
+    }
+#else
+    public UIDrawCall FindDrawCall (UIWidget w)
 	{
 		Material mat = w.material;
 		Texture tex = w.mainTexture;
@@ -1717,33 +2010,85 @@ public class UIPanel : UIRect
 		for (int i = 0; i < drawCalls.Count; ++i)
 		{
 			UIDrawCall dc = drawCalls[i];
-			int dcStart = (i == 0) ? int.MinValue : drawCalls[i - 1].depthEnd + 1;
-			int dcEnd = (i + 1 == drawCalls.Count) ? int.MaxValue : drawCalls[i + 1].depthStart - 1;
+            int dcStart = dc.depthStart;
+            int dcEnd = dc.depthEnd;
 
-			if (dcStart <= depth && dcEnd >= depth)
+            if (dcStart <= depth && dcEnd >= depth && dc.batch == w.batch)
 			{
-				if (dc.baseMaterial == mat && dc.mainTexture == tex)
-				{
-					if (w.isVisible)
-					{
-						w.drawCall = dc;
-						if (w.hasVertices) dc.isDirty = true;
-						return dc;
-					}
-				}
-				else mRebuild = true;
-				return null;
+                if (dc.baseMaterial == mat && dc.mainTexture == tex)
+                {
+                    if (w.isVisible)
+                    {
+                        if (w.batch == BatchMode.Static)
+                        {                            
+                            w.drawCall = dc;
+
+                            if (w.hasVertices)
+                            {
+                                dc.isDirty = true;
+#if DEBUG_REBUILD
+                                Debug.LogWarning("build dc " + dc.name + "for: " + w.name, w.gameObject);
+#endif
+                            }                            
+                        }
+                        else
+                        {
+                            if (w.batch == BatchMode.Dynamic)
+                            {
+                                dc = UIDrawCall.Clone(dc);
+                            }
+                            else
+                            {
+                                dc = UIDrawCall.Create(this, mat, tex, dc.shader);
+                                dc.batch = w.batch;
+                            }
+
+                            dc.cachedTransform.parent = panelRoot;
+                            NGUITools.Identity(dc.cachedTransform);
+                            dc.depthStart = w.depth;
+                            dc.depthEnd = dc.depthStart;
+                            dc.panel = this;
+                            w.drawCall = dc;
+                            dc.isDirty = true;
+                            //w.UpdateGeometry(Time.frameCount);
+                            //if (generateNormals) w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, dc.norms, dc.tans, generateUV2 ? dc.uv2 : null);
+                            //else w.WriteToBuffers(dc.verts, dc.uvs, dc.cols, null, null, generateUV2 ? dc.uv2 : null);
+                            //dc.onRender = w.onRender;
+                            //dc.UpdateGeometry(1);
+                            //dc.UpdateRender();
+                            w.UpateDrawCall();
+                            drawCalls.Insert(i + 1, dc);
+                        }
+
+                        return dc;
+                    }
+                }
+                else
+                {
+                    mRebuild = true;
+#if DEBUG_REBUILD
+                    Debug.LogWarning("FindDrawCall dc fail: " + w.name, w.gameObject);
+#endif
+                }
+                return null;
 			}
 		}
+
 		mRebuild = true;
-		return null;
+#if DEBUG_REBUILD
+        if (beCheckRebuild)
+        {
+            Debug.LogWarning("FindDrawCall fail: " + w.name, w.gameObject);
+        }
+#endif
+        return null;
 	}
+#endif
+    /// <summary>
+    /// Make the following widget be managed by the panel.
+    /// </summary>
 
-	/// <summary>
-	/// Make the following widget be managed by the panel.
-	/// </summary>
-
-	public void AddWidget (UIWidget w)
+    public void AddWidget (UIWidget w)
 	{
 		mUpdateScroll = true;
 
@@ -1781,10 +2126,26 @@ public class UIPanel : UIRect
 		if (widgets.Remove(w) && w.drawCall != null)
 		{
 			int depth = w.depth;
-			if (depth == w.drawCall.depthStart || depth == w.drawCall.depthEnd)
-				mRebuild = true;
 
-			w.drawCall.isDirty = true;
+#if NGUI_BACKUP
+            if (depth == w.drawCall.depthStart || depth == w.drawCall.depthEnd)
+            {
+                mRebuild = true;
+#if DEBUG_REBUILD
+                Debug.LogWarning(string.Format("Remove Widget: {0}", w.name), w.gameObject);
+#endif
+            }
+#else
+            if (w.batch == BatchMode.Static && w.drawCall.widgetCount != 1 && (depth == w.drawCall.depthStart || depth == w.drawCall.depthEnd))
+            {
+                mRebuild = true;
+#if DEBUG_REBUILD
+                Debug.LogWarning(string.Format("Remove Widget: {0}", w.name), w.gameObject);
+#endif
+            }
+#endif
+
+            w.drawCall.isDirty = true;
 			w.drawCall = null;
 		}
 	}

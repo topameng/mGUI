@@ -1,9 +1,9 @@
-Shader "Hidden/Unlit/Transparent Masked 2"
+﻿Shader "Hidden/Unlit/Transparent Colored_ETC 3"
 {
 	Properties
 	{
 		_MainTex ("Base (RGB), Alpha (A)", 2D) = "black" {}
-		_Mask ("Alpha (A)", 2D) = "white" {}
+		_AlphaTex ("Alpha Tex (R)", 2D) = "black" {}
 	}
 
 	SubShader
@@ -15,7 +15,6 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			//"DisableBatching" = "True"
 		}
 		
 		Pass
@@ -24,8 +23,7 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 			Lighting Off
 			ZWrite Off
 			Offset -1, -1
-			Fog { Mode Off }
-			//ColorMask RGB
+			Fog { Mode Off }			
 			Blend SrcAlpha OneMinusSrcAlpha
 
 			CGPROGRAM
@@ -35,27 +33,28 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 			#include "UnityCG.cginc"
 
 			sampler2D _MainTex;
-			sampler2D _Mask;
+			sampler2D _AlphaTex;
 			float4 _ClipRange0 = float4(0.0, 0.0, 1.0, 1.0);
 			float4 _ClipArgs0 = float4(1000.0, 1000.0, 0.0, 1.0);
 			float4 _ClipRange1 = float4(0.0, 0.0, 1.0, 1.0);
 			float4 _ClipArgs1 = float4(1000.0, 1000.0, 0.0, 1.0);
+			float4 _ClipRange2 = float4(0.0, 0.0, 1.0, 1.0);
+			float4 _ClipArgs2 = float4(1000.0, 1000.0, 0.0, 1.0);
 
 			struct appdata_t
 			{
 				float4 vertex : POSITION;
+				half4 color : COLOR;
 				float2 texcoord : TEXCOORD0;
-				float2 texcoord1 : TEXCOORD1;
-				fixed4 color : COLOR;
 			};
 
 			struct v2f
 			{
 				float4 vertex : SV_POSITION;
+				half4 color : COLOR;
 				float2 texcoord : TEXCOORD0;
-				float2 texcoord1 : TEXCOORD1;
-				float4 worldPos : TEXCOORD2;
-				fixed4 color : COLOR;
+				float4 worldPos : TEXCOORD1;
+				float2 worldPos2 : TEXCOORD2;
 			};
 
 			float2 Rotate (float2 v, float2 rot)
@@ -73,11 +72,11 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 				o.vertex = mul(UNITY_MATRIX_MVP, v.vertex);
 				o.color = v.color;
 				o.texcoord = v.texcoord;
-				o.texcoord1 = v.texcoord1;
 				float2 pos = (ComputeScreenPos(o.vertex).xy - float2(0.5, 0.5)) * _ScreenParams.xy;
 				pos = Rotate(pos - _ClipRange0.xy, _ClipArgs0.zw);
 				o.worldPos.xy = pos * _ClipRange0.zw;
-				o.worldPos.zw = Rotate(pos, _ClipArgs1.zw) * _ClipRange1.zw + _ClipRange1.xy;
+				o.worldPos.zw = Rotate(pos, _ClipArgs1.zw) * _ClipRange1.zw + _ClipRange1.xy;	
+				o.worldPos2 = Rotate(pos, _ClipArgs2.zw) * _ClipRange2.zw + _ClipRange2.xy;
 				return o;
 			}
 
@@ -91,10 +90,15 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 				factor = (float2(1.0, 1.0) - abs(IN.worldPos.zw)) * _ClipArgs1.xy;
 				f = min(f, min(factor.x, factor.y));
 
+				// Third clip region
+				factor = (float2(1.0, 1.0) - abs(IN.worldPos2)) * _ClipArgs2.xy;
+				f = min(f, min(factor.x, factor.y));
+
 				// Sample the texture
-				half4 col = tex2D(_MainTex, IN.texcoord) * IN.color;
+				half4 col;
+				col.rgb = tex2D(_MainTex, IN.texcoord).rgb * IN.color.rgb;
+				col.a=tex2D(_AlphaTex, IN.texcoord).r*IN.color.a;
 				col.a *= clamp(f, 0.0, 1.0);
-				col.a *= tex2D(_Mask, IN.texcoord1).a;
 				return col;
 			}
 			ENDCG
@@ -110,7 +114,6 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			//"DisableBatching" = "True"
 		}
 		
 		Pass
@@ -118,8 +121,7 @@ Shader "Hidden/Unlit/Transparent Masked 2"
 			Cull Off
 			Lighting Off
 			ZWrite Off
-			Fog { Mode Off }
-			//ColorMask RGB
+			Fog { Mode Off }			
 			Blend SrcAlpha OneMinusSrcAlpha
 			ColorMaterial AmbientAndDiffuse
 			

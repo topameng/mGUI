@@ -19,11 +19,24 @@ using System.Collections.Generic;
 
 public class UIGeometry
 {
-	/// <summary>
-	/// Widget's vertices (before they get transformed).
-	/// </summary>
+    /// <summary>
+    /// Widget's vertices (before they get transformed).
+    /// </summary>
 
-	public List<Vector3> verts = new List<Vector3>();
+    public List<Vector3> verts
+    {
+        get
+        {
+            return _verts;
+        }
+
+        set
+        {
+            _verts = value;
+        }
+    }
+
+    public List<Vector3> _verts = new List<Vector3>();
 
 	/// <summary>
 	/// Widget's texture coordinates for the geometry's vertices.
@@ -43,10 +56,14 @@ public class UIGeometry
 	/// </summary>
 
 	public OnCustomWrite onCustomWrite;
-	public delegate void OnCustomWrite (List<Vector3> v, List<Vector2> u, List<Color> c, List<Vector3> n, List<Vector4> t, List<Vector4> u2);
+#if NGUI_BACKUP
+    public delegate void OnCustomWrite (List<Vector3> v, List<Vector2> u, List<Color> c, List<Vector3> n, List<Vector4> t, List<Vector4> u2);
+#else
+    public delegate void OnCustomWrite(FreeList<Vector3> v, FreeList<Vector2> u, FreeList<Color> c, FreeList<Vector3> n, FreeList<Vector4> t, FreeList<Vector2> u2);
+#endif
 
-	// Relative-to-panel vertices, normal, and tangent
-	List<Vector3> mRtpVerts = new List<Vector3>();
+    // Relative-to-panel vertices, normal, and tangent
+    List<Vector3> mRtpVerts = new List<Vector3>();
 	Vector3 mRtpNormal;
 	Vector4 mRtpTan;
 
@@ -54,13 +71,13 @@ public class UIGeometry
 	/// Whether the geometry contains usable vertices.
 	/// </summary>
 
-	public bool hasVertices { get { return (verts.Count > 0); } }
+	public bool hasVertices { get { return (_verts.Count > 0); } }
 
 	/// <summary>
 	/// Whether the geometry has usable transformed vertex data.
 	/// </summary>
 
-	public bool hasTransformed { get { return (mRtpVerts != null) && (mRtpVerts.Count > 0) && (mRtpVerts.Count == verts.Count); } }
+	public bool hasTransformed { get { return (mRtpVerts != null) && (mRtpVerts.Count > 0) && (mRtpVerts.Count == _verts.Count); } }
 
 	/// <summary>
 	/// Step 1: Prepare to fill the buffers -- make them clean and valid.
@@ -68,54 +85,107 @@ public class UIGeometry
 
 	public void Clear ()
 	{
-		verts.Clear();
+        _verts.Clear();
 		uvs.Clear();
 		cols.Clear();
 		mRtpVerts.Clear();
 	}
 
-	/// <summary>
-	/// Step 2: Transform the vertices by the provided matrix.
-	/// </summary>
+#if !NGUI_BACKUP
+    public void Destroy()
+    {
+        //verts.Dispose();
+        //uvs.Dispose();
+        //cols.Dispose();
+        //mRtpVerts.Dispose();
+    }
+#endif
 
-	public void ApplyTransform (Matrix4x4 widgetToPanel, bool generateNormals = true)
-	{
-		if (verts.Count > 0)
-		{
-			mRtpVerts.Clear();
-			for (int i = 0, imax = verts.Count; i < imax; ++i) mRtpVerts.Add(widgetToPanel.MultiplyPoint3x4(verts[i]));
+    /// <summary>
+    /// Step 2: Transform the vertices by the provided matrix.
+    /// </summary>
 
-			// Calculate the widget's normal and tangent
-			if (generateNormals)
-			{
-				mRtpNormal = widgetToPanel.MultiplyVector(Vector3.back).normalized;
-				Vector3 tangent = widgetToPanel.MultiplyVector(Vector3.right).normalized;
-				mRtpTan = new Vector4(tangent.x, tangent.y, tangent.z, -1f);
-			}
-		}
-		else mRtpVerts.Clear();
-	}
+    public void ApplyTransform(ref Matrix4x4 mat/*widgetToPanel*/, bool generateNormals = true)
+    {
+        if (_verts.Count > 0)
+        {
+            mRtpVerts.Clear();
+            for (int i = 0, imax = verts.Count; i < imax; ++i) mRtpVerts.Add(mat.MultiplyPoint3x4(verts[i]));
 
-	/// <summary>
-	/// Step 3: Fill the specified buffer using the transformed values.
-	/// </summary>
+            // Calculate the widget's normal and tangent
+            if (generateNormals)
+            {
+                mRtpNormal = mat.MultiplyVector(Vector3.back).normalized;
+                Vector3 tangent = mat.MultiplyVector(Vector3.right).normalized;
+                mRtpTan = new Vector4(tangent.x, tangent.y, tangent.z, -1f);
+            }
+        }
+        else mRtpVerts.Clear();
+    }
 
+#if !NGUI_BACKUP
+    public void SetSingle(bool flag)
+    {
+        //if (flag)
+        //{
+        //    mRtpVerts = verts;
+        //}
+        //else if (mRtpVerts == verts)
+        //{
+        //    mRtpVerts = new List<Vector3>();
+        //}
+    }
+
+    public void UpdateRtpVert(bool flag)
+    {
+        if (flag && verts.Count > 0)
+        {
+            mRtpVerts.Clear();
+            for (int i = 0, imax = verts.Count; i < imax; ++i) mRtpVerts.Add(verts[i]);
+        }
+    }
+
+    public void UpdateTransform(ref Matrix4x4 mat/*widgetToPanel*/, bool generateNormals = true)
+    {
+        if (generateNormals)
+        {
+            mRtpNormal = mat.MultiplyVector(Vector3.back).normalized;
+            Vector3 tangent = mat.MultiplyVector(Vector3.right).normalized;
+            mRtpTan = new Vector4(tangent.x, tangent.y, tangent.z, -1f);
+        }
+    }
+#endif
+
+    /// <summary>
+    /// Step 3: Fill the specified buffer using the transformed values.
+    /// </summary>
+#if NGUI_BACKUP
 	public void WriteToBuffers (List<Vector3> v, List<Vector2> u, List<Color> c, List<Vector3> n, List<Vector4> t, List<Vector4> u2)
-	{
+#else
+    public void WriteToBuffers(FreeList<Vector3> v, FreeList<Vector2> u, FreeList<Color> c, FreeList<Vector3> n, FreeList<Vector4> t, FreeList<Vector2> u2)
+#endif
+    {
 		if (mRtpVerts != null && mRtpVerts.Count > 0)
 		{
 			if (n == null)
 			{
-				for (int i = 0, imax = mRtpVerts.Count; i < imax; ++i)
+#if NGUI_BACKUP
+                for (int i = 0, imax = mRtpVerts.Count; i < imax; ++i)
 				{
 					v.Add(mRtpVerts[i]);
 					u.Add(uvs[i]);
 					c.Add(cols[i]);
 				}
-			}
+#else
+                v.AddRange(mRtpVerts);
+                u.AddRange(uvs);
+                c.AddRange(cols);
+#endif
+            }
 			else
 			{
-				for (int i = 0, imax = mRtpVerts.Count; i < imax; ++i)
+#if NGUI_BACKUP
+                for (int i = 0, imax = mRtpVerts.Count; i < imax; ++i)
 				{
 					v.Add(mRtpVerts[i]);
 					u.Add(uvs[i]);
@@ -123,13 +193,28 @@ public class UIGeometry
 					n.Add(mRtpNormal);
 					t.Add(mRtpTan);
 				}
-			}
+#else
+                v.AddRange(mRtpVerts);
+                u.AddRange(uvs);
+                c.AddRange(cols);
 
-			if (u2 != null)
+                for (int i = 0, imax = mRtpVerts.Count; i < imax; ++i)
+                {
+                    n.Add(mRtpNormal);
+                    t.Add(mRtpTan);
+                }
+#endif
+            }
+
+            if (u2 != null)
 			{
-				Vector4 uv2 = Vector4.zero;
+#if NGUI_BACKUP
+                Vector4 uv2 = Vector4.zero;
+#else
+                Vector2 uv2 = Vector2.zero;
+#endif
 
-				for (int i = 0, imax = verts.Count; i < imax; ++i)
+                for (int i = 0, imax = verts.Count; i < imax; ++i)
 				{
 					uv2.x = verts[i].x;
 					uv2.y = verts[i].y;

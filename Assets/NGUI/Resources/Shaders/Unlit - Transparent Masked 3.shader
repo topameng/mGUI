@@ -15,7 +15,7 @@ Shader "Hidden/Unlit/Transparent Masked 3"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 		
 		Pass
@@ -77,9 +77,11 @@ Shader "Hidden/Unlit/Transparent Masked 3"
 				o.color = v.color;
 				o.texcoord = v.texcoord;
 				o.texcoord1 = v.texcoord1;
-				o.worldPos.xy = v.vertex.xy * _ClipRange0.zw + _ClipRange0.xy;
-				o.worldPos.zw = Rotate(v.vertex.xy, _ClipArgs1.zw) * _ClipRange1.zw + _ClipRange1.xy;
-				o.worldPos2 = Rotate(v.vertex.xy, _ClipArgs2.zw) * _ClipRange2.zw + _ClipRange2.xy;
+				float2 pos = (ComputeScreenPos(o.vertex).xy - float2(0.5, 0.5)) * _ScreenParams.xy;
+				pos = Rotate(pos - _ClipRange0.xy, _ClipArgs0.zw);
+				o.worldPos.xy = pos * _ClipRange0.zw;
+				o.worldPos.zw = Rotate(pos, _ClipArgs1.zw) * _ClipRange1.zw + _ClipRange1.xy;	
+				o.worldPos2 = Rotate(pos, _ClipArgs2.zw) * _ClipRange2.zw + _ClipRange2.xy;
 				return o;
 			}
 
@@ -116,7 +118,7 @@ Shader "Hidden/Unlit/Transparent Masked 3"
 			"Queue" = "Transparent"
 			"IgnoreProjector" = "True"
 			"RenderType" = "Transparent"
-			"DisableBatching" = "True"
+			//"DisableBatching" = "True"
 		}
 		
 		Pass

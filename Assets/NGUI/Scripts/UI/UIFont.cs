@@ -626,11 +626,47 @@ public class UIFont : MonoBehaviour
 		return null;
 	}
 
-	/// <summary>
-	/// Add a new symbol to the font.
-	/// </summary>
+#if !NGUI_BACKUP
+    public BMSymbol MatchSymbol(CString text, int offset, int textLength)
+    {
+        // No symbols present
+        int count = mSymbols.Count;
+        if (count == 0) return null;
+        textLength -= offset;
 
-	public void AddSymbol (string sequence, string spriteName)
+        // Run through all symbols
+        for (int i = 0; i < count; ++i)
+        {
+            BMSymbol sym = mSymbols[i];
+
+            // If the symbol's length is longer, move on
+            int symbolLength = sym.length;
+            if (symbolLength == 0 || textLength < symbolLength) continue;
+
+            bool match = true;
+
+            // Match the characters
+            for (int c = 0; c < symbolLength; ++c)
+            {
+                if (text[offset + c] != sym.sequence[c])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            // Match found
+            if (match && sym.Validate(atlas)) return sym;
+        }
+        return null;
+    }
+#endif
+
+    /// <summary>
+    /// Add a new symbol to the font.
+    /// </summary>
+
+    public void AddSymbol (string sequence, string spriteName)
 	{
 		BMSymbol symbol = GetSymbol(sequence, true);
 		symbol.spriteName = spriteName;

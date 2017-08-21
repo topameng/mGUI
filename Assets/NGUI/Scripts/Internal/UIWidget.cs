@@ -5,6 +5,7 @@
 
 using UnityEngine;
 using System.Collections.Generic;
+using BatchMode = UIDrawCall.BatchMode;
 
 /// <summary>
 /// Base class for all UI components that should be derived from when creating new widget types.
@@ -36,12 +37,13 @@ public class UIWidget : UIRect
 
 	[Tooltip("Custom material, if desired")]
 	[HideInInspector][SerializeField] protected Material mMat;
+    [HideInInspector][SerializeField] protected BatchMode mBatch = BatchMode.Static;
 
-	/// <summary>
-	/// Notification triggered when the widget's dimensions or position changes.
-	/// </summary>
+    /// <summary>
+    /// Notification triggered when the widget's dimensions or position changes.
+    /// </summary>
 
-	public OnDimensionsChanged onChange;
+    public OnDimensionsChanged onChange;
 	public delegate void OnDimensionsChanged ();
 
 	/// <summary>
@@ -338,11 +340,12 @@ public class UIWidget : UIRect
 
 	public bool hasVertices { get { return geometry != null && geometry.hasVertices; } }
 
-	/// <summary>
-	/// Change the pivot point and do not attempt to keep the widget in the same place by adjusting its transform.
-	/// </summary>
 
-	public Pivot rawPivot
+    /// <summary>
+    /// Change the pivot point and do not attempt to keep the widget in the same place by adjusting its transform.
+    /// </summary>
+
+    public Pivot rawPivot
 	{
 		get
 		{
@@ -638,11 +641,33 @@ public class UIWidget : UIRect
 		}
 	}
 
-	/// <summary>
-	/// Adjust the widget's dimensions without going through the anchor validation logic.
-	/// </summary>
+#if !NGUI_BACKUP
+    public BatchMode batch
+    {
+        get
+        {
+            return mBatch;
+        }
 
-	public void SetDimensions (int w, int h)
+        set
+        {
+            if (mBatch == value)
+            {
+                return;
+            }
+
+            mBatch = value;
+            RemoveFromPanel();
+            MarkAsChanged();            
+        }
+    }
+#endif
+
+    /// <summary>
+    /// Adjust the widget's dimensions without going through the anchor validation logic.
+    /// </summary>
+
+    public void SetDimensions (int w, int h)
 	{
 		if (mWidth != w || mHeight != h)
 		{
@@ -990,9 +1015,9 @@ public class UIWidget : UIRect
 	{
 		if (mStarted && panel == null && enabled && NGUITools.GetActive(gameObject))
 		{
-			panel = UIPanel.Find(cachedTransform, true, cachedGameObject.layer);
+            panel = UIPanel.Find(cachedTransform, true, cachedGameObject.layer);
 
-			if (panel != null)
+            if (panel != null)
 			{
 				mParentFound = false;
 				panel.AddWidget(this);
@@ -1045,7 +1070,14 @@ public class UIWidget : UIRect
 	{
 		base.Awake();
 		mPlayMode = Application.isPlaying;
-	}
+
+#if !NGUI_BACKUP
+        if (mBatch != BatchMode.Static)
+        {
+            geometry.SetSingle(true);
+        }
+#endif
+    }
 
 	/// <summary>
 	/// Mark the widget and the panel as having been changed.
@@ -1242,11 +1274,13 @@ public class UIWidget : UIRect
 
 	protected override void OnUpdate ()
 	{
-		if (panel == null) CreatePanel();
 #if UNITY_EDITOR
-		else if (!mPlayMode) ParentHasChanged();
+        if (panel == null) CreatePanel();
+        else if (!mPlayMode) ParentHasChanged();
+#else
+        if ((object)panel == null) CreatePanel();
 #endif
-	}
+    }
 
 #if !UNITY_EDITOR
 	/// <summary>
@@ -1256,13 +1290,16 @@ public class UIWidget : UIRect
 	void OnApplicationPause (bool paused) { if (!paused) MarkAsChanged(); }
 #endif
 
-	/// <summary>
-	/// Clear references.
-	/// </summary>
+    /// <summary>
+    /// Clear references.
+    /// </summary>
 
-	protected override void OnDisable ()
+    protected override void OnDisable ()
 	{
-		RemoveFromPanel();
+#if !NGUI_BACKUP
+        geometry.Destroy();
+#endif
+        RemoveFromPanel();
 		base.OnDisable();
 	}
 
@@ -1270,7 +1307,13 @@ public class UIWidget : UIRect
 	/// Unregister this widget.
 	/// </summary>
 
-	void OnDestroy () { RemoveFromPanel(); }
+	protected virtual void OnDestroy ()
+    {
+#if !NGUI_BACKUP
+        geometry.Destroy();
+#endif
+        RemoveFromPanel();        
+    }
 
 #if UNITY_EDITOR
 	static int mHandles = -1;
@@ -1370,14 +1413,21 @@ public class UIWidget : UIRect
 	int mMatrixFrame = -1;
 	Vector3 mOldV0;
 	Vector3 mOldV1;
+#if !NGUI_BACKUP
+    Quaternion kRotation = Quaternion.identity;
+#endif
+    bool mRotate = false;
 
-	/// <summary>
-	/// Check to see if the widget has moved relative to the panel that manages it
-	/// </summary>
+    /// <summary>
+    /// Check to see if the widget has moved relative to the panel that manages it
+    /// </summary>
 
-	public bool UpdateTransform (int frame)
+    public bool UpdateTransform (int frame)
 	{
-		Transform trans = cachedTransform;
+#if !NGUI_BACKUP
+        if (hideFlag) return false;
+#endif
+        Transform trans = cachedTransform;
 		mPlayMode = Application.isPlaying;
 
 #if UNITY_EDITOR
@@ -1387,7 +1437,8 @@ public class UIWidget : UIRect
 #endif
 		{
 			mMoved = true;
-			mMatrixFrame = -1;
+            mRotate = true;
+            mMatrixFrame = -1;
 			trans.hasChanged = false;
 			Vector2 offset = pivotOffset;
 
@@ -1399,42 +1450,113 @@ public class UIWidget : UIRect
 			mOldV0 = panel.worldToLocal.MultiplyPoint3x4(trans.TransformPoint(x0, y0, 0f));
 			mOldV1 = panel.worldToLocal.MultiplyPoint3x4(trans.TransformPoint(x1, y1, 0f));
 		}
-		else if (!panel.widgetsAreStatic && trans.hasChanged)
-		{
-			mMatrixFrame = -1;
-			trans.hasChanged = false;
-			Vector2 offset = pivotOffset;
+#if !NGUI_BACKUP
+        else if (mBatch != BatchMode.Static && trans.hasChanged)
+        {
+            trans.hasChanged = false;
+            mMoved = true;
+            mMatrixFrame = Time.frameCount;
 
-			float x0 = -offset.x * mWidth;
-			float y0 = -offset.y * mHeight;
-			float x1 = x0 + mWidth;
-			float y1 = y0 + mHeight;
+            if (panel.generateNormals || trans.rotation != kRotation)
+            {
+                mRotate = true;                
+                mMatrixFrame = -1;
+            }                
+        }
+#endif
+        else if (!panel.widgetsAreStatic && trans.hasChanged)
+        {
+            mMatrixFrame = -1;
+            trans.hasChanged = false;
+            Vector2 offset = pivotOffset;
 
-			Vector3 v0 = panel.worldToLocal.MultiplyPoint3x4(trans.TransformPoint(x0, y0, 0f));
-			Vector3 v1 = panel.worldToLocal.MultiplyPoint3x4(trans.TransformPoint(x1, y1, 0f));
+            float x0 = -offset.x * mWidth;
+            float y0 = -offset.y * mHeight;
+            float x1 = x0 + mWidth;
+            float y1 = y0 + mHeight;
 
-			if (Vector3.SqrMagnitude(mOldV0 - v0) > 0.000001f ||
-				Vector3.SqrMagnitude(mOldV1 - v1) > 0.000001f)
-			{
-				mMoved = true;
-				mOldV0 = v0;
-				mOldV1 = v1;
-			}
-		}
+            Vector3 v0 = panel.worldToLocal.MultiplyPoint3x4(trans.TransformPoint(x0, y0, 0f));
+            Vector3 v1 = panel.worldToLocal.MultiplyPoint3x4(trans.TransformPoint(x1, y1, 0f));
+
+            if (Vector3.SqrMagnitude(mOldV0 - v0) > 0.000001f ||
+                Vector3.SqrMagnitude(mOldV1 - v1) > 0.000001f)
+            {
+                mMoved = true;
+                mOldV0 = v0;
+                mOldV1 = v1;
+            }
+        }
 
 		// Notify the listeners
-		if (mMoved && onChange != null) onChange();
+		if (mMoved && onChange != null) onChange();        
 		return mMoved || mChanged;
 	}
 
-	/// <summary>
-	/// Update the widget and fill its geometry if necessary. Returns whether something was changed.
-	/// </summary>
+#if NGUI_BACKUP
+    void ApplyTransform()
+    {
+        geometry.ApplyTransform(ref mLocalToPanel, panel.generateNormals);
+    }
+#else
 
-	public bool UpdateGeometry (int frame)
+    void ApplyTransform()
+    {
+        if (mBatch == BatchMode.Static)
+        {
+            geometry.ApplyTransform(ref mLocalToPanel, panel.generateNormals);
+        }
+        else if (mMoved)        
+        {            
+            if (drawCall != null)
+            {
+                Transform dc = drawCall.cachedTransform;
+                Vector3 pos = panel.cachedTransform.InverseTransformPoint(cachedTransform.position);
+                dc.localPosition = pos;
+
+                Vector3 scale = panel.cachedTransform.lossyScale.InvScale();
+                dc.localScale = Vector3.Scale(cachedTransform.lossyScale, scale);
+
+                if (mRotate)
+                {
+                    dc.localRotation = mLocalToPanel.ToQuaternion();
+                    kRotation = cachedTransform.rotation;
+                }
+            }
+
+            geometry.UpdateTransform(ref mLocalToPanel, panel.generateNormals);                
+        }
+    }
+
+    public void UpateDrawCall()
+    {
+        if (mBatch != BatchMode.Static)
+        {                        
+            Vector3 pos = panel.cachedTransform.InverseTransformPoint(cachedTransform.position);
+            Transform dc = drawCall.cachedTransform;
+            dc.localPosition = pos;
+            Vector3 scale = panel.cachedTransform.lossyScale.InvScale();
+            dc.localScale = Vector3.Scale(cachedTransform.lossyScale, scale);
+
+            if (cachedTransform.rotation != Quaternion.identity)
+            {
+                mLocalToPanel = panel.worldToLocal * cachedTransform.localToWorldMatrix;
+                dc.localRotation = mLocalToPanel.ToQuaternion();
+                kRotation = cachedTransform.rotation;
+            }
+        }
+    }
+#endif
+
+    /// <summary>
+    /// Update the widget and fill its geometry if necessary. Returns whether something was changed.
+    /// </summary>
+    public bool UpdateGeometry (int frame)
 	{
-		// Has the alpha changed?
-		float finalAlpha = CalculateFinalAlpha(frame);
+#if !NGUI_BACKUP
+        if (hideFlag) return false;
+#endif
+        // Has the alpha changed?
+        float finalAlpha = CalculateFinalAlpha(frame);
 		if (mIsVisibleByAlpha && mLastAlpha != finalAlpha) mChanged = true;
 		mLastAlpha = finalAlpha;
 
@@ -1443,12 +1565,15 @@ public class UIWidget : UIRect
 			if (mIsVisibleByAlpha && finalAlpha > 0.001f && shader != null)
 			{
 				bool hadVertices = geometry.hasVertices;
-
-				if (fillGeometry)
+#if !NGUI_BACKUP
+                //必须放在这里而不是fillGeometry条件中，只在Input里面控制fillGeometry但在label中填充了geometry
+                geometry.SetSingle(mBatch != BatchMode.Static); 
+#endif
+                if (fillGeometry)
 				{
 					geometry.Clear();
-					OnFill(geometry.verts, geometry.uvs, geometry.cols);
-				}
+                    OnFill(geometry.verts, geometry.uvs, geometry.cols);                    
+                }
 
 				if (geometry.hasVertices)
 				{
@@ -1460,21 +1585,26 @@ public class UIWidget : UIRect
 						mLocalToPanel = panel.worldToLocal * cachedTransform.localToWorldMatrix;
 						mMatrixFrame = frame;
 					}
-					geometry.ApplyTransform(mLocalToPanel, panel.generateNormals);
+					ApplyTransform();
+#if !NGUI_BACKUP
+                    geometry.UpdateRtpVert(mBatch != BatchMode.Static);
+#endif
 					mMoved = false;
+                    mRotate = false;
 					mChanged = false;
 					return true;
 				}
 
-				mChanged = false;
+				mChanged = false;                
 				return hadVertices;
 			}
 			else if (geometry.hasVertices)
 			{
 				if (fillGeometry) geometry.Clear();
 				mMoved = false;
-				mChanged = false;
-				return true;
+                mRotate = false;
+                mChanged = false;                
+                return true;
 			}
 		}
 		else if (mMoved && geometry.hasVertices)
@@ -1487,22 +1617,32 @@ public class UIWidget : UIRect
 				mLocalToPanel = panel.worldToLocal * cachedTransform.localToWorldMatrix;
 				mMatrixFrame = frame;
 			}
-			geometry.ApplyTransform(mLocalToPanel, panel.generateNormals);
+			ApplyTransform();
 			mMoved = false;
-			mChanged = false;
-			return true;
+            mRotate = false;
+            mChanged = false;
+#if NGUI_BACKUP
+            return true;
+#else
+            return mBatch == BatchMode.Static;
+#endif
 		}
 		mMoved = false;
-		mChanged = false;
-		return false;
+        mRotate = false;
+		mChanged = false;        
+        return false;
 	}
 
-	/// <summary>
-	/// Append the local geometry buffers to the specified ones.
-	/// </summary>
+    /// <summary>
+    /// Append the local geometry buffers to the specified ones.
+    /// </summary>
 
-	public void WriteToBuffers (List<Vector3> v, List<Vector2> u, List<Color> c, List<Vector3> n, List<Vector4> t, List<Vector4> u2)
-	{
+#if NGUI_BACKUP
+    public void WriteToBuffers (List<Vector3> v, List<Vector2> u, List<Color> c, List<Vector3> n, List<Vector4> t, List<Vector4> u2)
+#else
+    public void WriteToBuffers(FreeList<Vector3> v, FreeList<Vector2> u, FreeList<Color> c, FreeList<Vector3> n, FreeList<Vector4> t, FreeList<Vector2> u2)
+#endif
+    {
 		geometry.WriteToBuffers(v, u, c, n, t, u2);
 	}
 
@@ -1540,14 +1680,69 @@ public class UIWidget : UIRect
 
 	virtual public Vector4 border { get { return Vector4.zero; } set { } }
 
-	/// <summary>
-	/// Virtual function called by the UIPanel that fills the buffers.
-	/// </summary>
-
-	virtual public void OnFill (List<Vector3> verts, List<Vector2> uvs, List<Color> cols)
-	{
+    /// <summary>
+    /// Virtual function called by the UIPanel that fills the buffers.
+    /// </summary>
+    virtual public void OnFill(List<Vector3> verts, List<Vector2> uvs, List<Color> cols)
+    {
 		// Call this in your derived classes:
 		//if (onPostFill != null)
 		//	onPostFill(this, verts.size, verts, uvs, cols);
 	}
+
+    public void Hide()
+    {        
+#if NGUI_BACKUP
+        enabled = false;
+#else
+        hideFlag = true;
+
+        if (mBatch != BatchMode.Static)
+        {
+            drawCall.Renderer.enabled = false;
+        }
+        else
+        {
+            enabled = false;
+        }
+#endif
+    }
+
+    public void Show()
+    {        
+        if (!enabled)
+        {
+            enabled = true;
+        }
+
+#if !NGUI_BACKUP
+        hideFlag = false;
+
+        if (drawCall != null && drawCall.Renderer != null)
+        {
+            drawCall.Renderer.enabled = true;
+        }
+#endif
+    }
+
+    public void Switch()
+    {        
+#if NGUI_BACKUP
+        enabled = !enabled;
+#else
+        hideFlag = !hideFlag;
+
+        if (mBatch != BatchMode.Static)
+        {
+            if (drawCall != null && drawCall.Renderer != null)
+            {
+                drawCall.Renderer.enabled = !hideFlag;
+            }
+        }
+        else
+        {
+            enabled = !hideFlag;
+        }
+#endif
+    }
 }
