@@ -84,11 +84,16 @@ public class UIEventListener : MonoBehaviour
 		onTooltip = null;
 	}
 
-	/// <summary>
-	/// Get or add an event listener to the specified game object.
-	/// </summary>
+    private void OnDestroy()
+    {
+        Clear();
+    }
 
-	static public UIEventListener Get (GameObject go)
+    /// <summary>
+    /// Get or add an event listener to the specified game object.
+    /// </summary>
+
+    static public UIEventListener Get (GameObject go)
 	{
 		UIEventListener listener = go.GetComponent<UIEventListener>();
 		if (listener == null) listener = go.AddComponent<UIEventListener>();

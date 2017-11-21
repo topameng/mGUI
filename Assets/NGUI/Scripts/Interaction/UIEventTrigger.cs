@@ -44,7 +44,24 @@ public class UIEventTrigger : MonoBehaviour
 		}
 	}
 
-	void OnHover (bool isOver)
+    void OnDestroy()
+    {
+        onHoverOver.Clear();
+        onHoverOut.Clear();
+        onPress.Clear();
+        onRelease.Clear();
+        onSelect.Clear();
+        onDeselect.Clear();
+        onClick.Clear();
+        onDoubleClick.Clear();
+        onDragStart.Clear();
+        onDragEnd.Clear();
+        onDragOver.Clear();
+        onDragOut.Clear();
+        onDrag.Clear();
+    }
+
+    void OnHover (bool isOver)
 	{
 		if (current != null || !isColliderEnabled) return;
 		current = this;
