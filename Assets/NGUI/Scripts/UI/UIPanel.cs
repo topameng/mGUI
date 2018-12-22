@@ -1,4 +1,4 @@
-//----------------------------------------------
+﻿//----------------------------------------------
 //            NGUI: Next-Gen UI kit
 // Copyright © 2011-2016 Tasharen Entertainment
 //----------------------------------------------
@@ -1665,7 +1665,7 @@ public class UIPanel : UIRect
 	/// Fill the geometry for the specified draw call.
 	/// </summary>
 
-	public bool FillDrawCall (UIDrawCall dc)
+	public bool FillDrawCall (UIDrawCall dc, bool beForce = false)
 	{
 		if (dc != null)
 		{
@@ -1687,7 +1687,7 @@ public class UIPanel : UIRect
 
 				if (w.drawCall == dc)
 				{
-                    if (w.isVisible && w.hasVertices)
+                    if (beForce || (w.isVisible && w.hasVertices))
                     {
                         ++count;                        
 
