@@ -905,7 +905,7 @@ public static class UnGfx
 
         for (int i = 1; i < strs.Length; i++)
         {
-            node = node.FindChild(strs[i]);
+            node = node.Find(strs[i]);
 
             if (node == null)
             {

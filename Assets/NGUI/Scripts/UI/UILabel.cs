@@ -1,4 +1,4 @@
-//----------------------------------------------
+﻿//----------------------------------------------
 //            NGUI: Next-Gen UI kit
 // Copyright © 2011-2016 Tasharen Entertainment
 //----------------------------------------------
@@ -1123,7 +1123,7 @@ public class UILabel : UIWidget
 			for (int i = 0, imax = mTempDrawcalls.Count; i < imax; ++i)
 			{
 				UIDrawCall dc = mTempDrawcalls[i];
-				if (dc.panel != null) dc.panel.FillDrawCall(dc);
+				if (dc.panel != null) dc.panel.FillDrawCall(dc, true);
 			}
 			mTempDrawcalls.Clear();
 		}
