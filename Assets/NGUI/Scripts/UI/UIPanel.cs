@@ -1687,7 +1687,7 @@ public class UIPanel : UIRect
 
 				if (w.drawCall == dc)
 				{
-                    if ((beForce || w.isVisible) && w.hasVertices)
+                    if ((beForce || w.isVisible) && w.hasVertices)                    
                     {
                         ++count;                        
 
